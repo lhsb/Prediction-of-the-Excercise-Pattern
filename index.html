@@ -1,0 +1,194 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Prediction-of-the-excercise-pattern by lhsb</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">Prediction-of-the-excercise-pattern</h1>
+        <p class="header"></p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/lhsb/Prediction-of-the-Excercise-Pattern/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/lhsb/Prediction-of-the-Excercise-Pattern/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/lhsb/Prediction-of-the-Excercise-Pattern">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/lhsb">lhsb</a></p>
+
+
+      </header>
+      <section>
+        <h1>
+<a name="prediction-of-the-excercise-manner" class="anchor" href="#prediction-of-the-excercise-manner"><span class="octicon octicon-link"></span></a>Prediction of the Excercise Manner</h1>
+
+<h2>
+<a name="loading-liabraries-and-data" class="anchor" href="#loading-liabraries-and-data"><span class="octicon octicon-link"></span></a>Loading liabraries and data</h2>
+
+<div class="highlight highlight-r"><pre><span class="kn">require</span><span class="p">(</span>gbm<span class="p">)</span>
+
+<span class="c1"># download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",</span>
+<span class="c1">#              destfile="~/training.csv",method='wget')</span>
+training <span class="o">=</span> read.csv<span class="p">(</span><span class="s">"~/training.csv"</span><span class="p">)</span>
+<span class="c1"># download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",</span>
+<span class="c1">#               destfile="~/testing.csv",method='wget')</span>
+testing <span class="o">=</span> read.csv<span class="p">(</span><span class="s">"~/testing.csv"</span><span class="p">)</span>
+</pre></div>
+
+<h2>
+<a name="explore-training-dataset" class="anchor" href="#explore-training-dataset"><span class="octicon octicon-link"></span></a>Explore training dataset</h2>
+
+<ul>
+<li>observation vs. variables ... as is</li>
+<li>observation vs. variables without NAs</li>
+<li>number of columns which contains NA</li>
+<li>all those columns contain the same amount of NAs 19216 which is almost 98% of all observations
+
+<ul>
+<li>there is no racional reason to impute the data</li>
+</ul>
+</li>
+</ul><div class="highlight highlight-r"><pre><span class="kp">dim</span><span class="p">(</span>training<span class="p">)</span>
+<span class="kp">dim</span><span class="p">(</span>na.omit<span class="p">(</span>training<span class="p">))</span>
+colSumsNA <span class="o">=</span> <span class="kp">colSums</span><span class="p">(</span><span class="kp">is.na</span><span class="p">(</span>training<span class="p">))</span>
+<span class="kp">sum</span><span class="p">(</span>colSumsNA <span class="o">&gt;</span> <span class="m">0</span><span class="p">)</span>
+<span class="kp">all</span><span class="p">(</span>colSumsNA<span class="p">[</span>colSumsNA<span class="o">&gt;</span><span class="m">0</span><span class="p">]</span> <span class="o">==</span> <span class="m">19216</span><span class="p">)</span>
+</pre></div>
+
+<h2>
+<a name="clean-training-dataset" class="anchor" href="#clean-training-dataset"><span class="octicon octicon-link"></span></a>Clean training dataset</h2>
+
+<ul>
+<li>
+<strong>remove variables:</strong> 'X', 'cvtd_timestamp', all which conatin NA and empty observation record</li>
+</ul><div class="highlight highlight-r"><pre>training <span class="o">=</span> training<span class="p">[,</span> <span class="o">-</span><span class="kt">c</span><span class="p">(</span><span class="m">1</span><span class="p">,</span> <span class="m">5</span><span class="p">,</span>
+                         <span class="kp">which</span><span class="p">(</span><span class="kp">colSums</span><span class="p">(</span><span class="kp">is.na</span><span class="p">(</span>training<span class="p">))</span> <span class="o">&gt;</span> <span class="m">0</span><span class="p">),</span>
+                         <span class="kp">which</span><span class="p">(</span><span class="kp">colSums</span><span class="p">(</span>training <span class="o">==</span> <span class="s">""</span><span class="p">)</span> <span class="o">&gt;</span> <span class="m">0</span><span class="p">))]</span>
+</pre></div>
+
+<h2>
+<a name="transform-training-dataset-variables" class="anchor" href="#transform-training-dataset-variables"><span class="octicon octicon-link"></span></a>Transform training dataset variables</h2>
+
+<ul>
+<li>transform factor varibales into binary variable</li>
+</ul><div class="highlight highlight-r"><pre>factCols <span class="o">=</span> <span class="kt">c</span><span class="p">(</span><span class="m">1</span><span class="p">,</span><span class="m">4</span><span class="p">)</span>
+<span class="kr">for</span><span class="p">(</span>colt <span class="kr">in</span> factCols<span class="p">)</span> <span class="p">{</span>    
+    d <span class="o">=</span> <span class="kp">as.data.frame</span><span class="p">(</span>training<span class="p">[,</span>colt<span class="p">])</span>
+    <span class="kr">for</span><span class="p">(</span>i <span class="kr">in</span> <span class="kp">levels</span><span class="p">(</span>d<span class="p">[,</span><span class="m">1</span><span class="p">]))</span> <span class="p">{</span>
+        d <span class="o">=</span> <span class="kp">cbind</span><span class="p">(</span>d<span class="p">,</span> <span class="p">(</span>i <span class="o">==</span> d<span class="p">[,</span><span class="m">1</span><span class="p">])</span> <span class="o">*</span> <span class="m">1</span><span class="p">)</span>
+        <span class="kp">colnames</span><span class="p">(</span>d<span class="p">)[</span><span class="kp">ncol</span><span class="p">(</span>d<span class="p">)]</span> <span class="o">=</span> <span class="kp">paste0</span><span class="p">(</span><span class="kp">colnames</span><span class="p">(</span>training<span class="p">)[</span>colt<span class="p">],</span><span class="s">"_"</span><span class="p">,</span>i<span class="p">)</span>
+    <span class="p">}</span>
+    training <span class="o">=</span> <span class="kp">cbind</span><span class="p">(</span>training<span class="p">,</span> d<span class="p">[,</span><span class="m">-1</span><span class="p">])</span>
+<span class="p">}</span>
+training <span class="o">=</span> training<span class="p">[,</span><span class="o">-</span><span class="kt">c</span><span class="p">(</span>factCols<span class="p">)]</span>
+d <span class="o">=</span> training<span class="p">[,</span><span class="m">57</span><span class="o">:</span><span class="m">64</span><span class="p">]</span>
+d<span class="p">[</span>d <span class="o">==</span> <span class="m">0</span><span class="p">]</span><span class="o">=</span><span class="m">-1</span>
+training<span class="p">[,</span><span class="m">57</span><span class="o">:</span><span class="m">64</span><span class="p">]</span> <span class="o">=</span> d
+</pre></div>
+
+<h2>
+<a name="create-model" class="anchor" href="#create-model"><span class="octicon octicon-link"></span></a>Create model</h2>
+
+<ul>
+<li>I choosed Gradient Boosting Method for multinomial distribution
+
+<ul>
+<li>it provides very high accuracy but interpretability is bad</li>
+<li>this kind of method is based on boosting trees</li>
+</ul>
+</li>
+<li>shown configuration is underfitted - see the picture
+
+<ul>
+<li>I recommend increase n.tree parameter - it improves accuracy</li>
+<li>I recommend increase cv.fold parameter - it improves robust of the model</li>
+</ul>
+</li>
+</ul><h3>
+<a name="expectation" class="anchor" href="#expectation"><span class="octicon octicon-link"></span></a>Expectation</h3>
+
+<ul>
+<li>I used only 4 fold cross validation because of computational difficulty. You can imporove robust of the model set the cross validation about 10 fold. Robust model means to have a model probably not to optimistic with the training data but we can obtain model with a lower error on testing dataset, which it is crucial.</li>
+<li>I chose smaller k - I got smaller vaiance but bigger bias.</li>
+</ul><div class="highlight highlight-r"><pre><span class="kp">set.seed</span><span class="p">(</span><span class="m">123</span><span class="p">)</span>
+
+fitMod <span class="o">&lt;-</span> gbm<span class="p">(</span>classe <span class="o">~</span> <span class="m">.</span><span class="p">,</span>
+           data <span class="o">=</span> training<span class="p">,</span>
+           distribution <span class="o">=</span> <span class="s">"multinomial"</span><span class="p">,</span>
+           n.tree <span class="o">=</span> <span class="m">2000</span><span class="p">,</span>
+           shrinkage <span class="o">=</span> <span class="m">0.001</span><span class="p">,</span>
+           cv.folds <span class="o">=</span> <span class="m">4</span><span class="p">,</span>
+           bag.fraction <span class="o">=</span> <span class="m">0.8</span><span class="p">,</span>
+           interaction.depth <span class="o">=</span> <span class="m">3</span><span class="p">,</span>
+           verbose <span class="o">=</span> <span class="kc">FALSE</span><span class="p">)</span>
+gbm.perf<span class="p">(</span> fitMod<span class="p">,</span> method<span class="o">=</span><span class="s">"cv"</span> <span class="p">)</span>
+</pre></div>
+
+<p><img src="figure/multinomial_deviance.png" alt="alt Multinomial Deviance"></p>
+
+<h2>
+<a name="prepare-testing-data-set" class="anchor" href="#prepare-testing-data-set"><span class="octicon octicon-link"></span></a>Prepare testing data set</h2>
+
+<ul>
+<li>
+<strong>remove variables</strong>: 'X', 'cvtd_timestamp', 'problem_id', all clumns with NAs</li>
+<li>transform factorial variables to the binary variables</li>
+<li>all variables in the test set must have the same format as in training dataset</li>
+</ul><div class="highlight highlight-r"><pre>testing <span class="o">=</span> testing<span class="p">[,</span><span class="o">-</span><span class="kt">c</span><span class="p">(</span><span class="kp">which</span><span class="p">(</span><span class="kp">colnames</span><span class="p">(</span>testing<span class="p">)</span> <span class="o">==</span> <span class="s">"problem_id"</span><span class="p">))]</span>
+testing <span class="o">=</span> testing<span class="p">[,</span> <span class="o">-</span><span class="kt">c</span><span class="p">(</span><span class="m">1</span><span class="p">,</span> <span class="m">5</span><span class="p">,</span> <span class="kp">which</span><span class="p">(</span><span class="kp">colSums</span><span class="p">(</span><span class="kp">is.na</span><span class="p">(</span>testing<span class="p">))</span> <span class="o">&gt;</span> <span class="m">0</span><span class="p">))]</span>
+factCols <span class="o">=</span> <span class="kt">c</span><span class="p">(</span><span class="m">1</span><span class="p">)</span>
+<span class="kr">for</span><span class="p">(</span>colt <span class="kr">in</span> factCols<span class="p">)</span> <span class="p">{</span>    
+    d <span class="o">=</span> <span class="kp">as.data.frame</span><span class="p">(</span>testing<span class="p">[,</span>colt<span class="p">])</span>
+    <span class="kr">for</span><span class="p">(</span>i <span class="kr">in</span> <span class="kp">levels</span><span class="p">(</span>d<span class="p">[,</span><span class="m">1</span><span class="p">]))</span> <span class="p">{</span>
+        d <span class="o">=</span> <span class="kp">cbind</span><span class="p">(</span>d<span class="p">,</span> <span class="p">(</span>i <span class="o">==</span> d<span class="p">[,</span><span class="m">1</span><span class="p">])</span> <span class="o">*</span> <span class="m">1</span><span class="p">)</span>
+        <span class="kp">colnames</span><span class="p">(</span>d<span class="p">)[</span><span class="kp">ncol</span><span class="p">(</span>d<span class="p">)]</span> <span class="o">=</span> <span class="kp">paste0</span><span class="p">(</span><span class="kp">colnames</span><span class="p">(</span>testing<span class="p">)[</span>colt<span class="p">],</span><span class="s">"_"</span><span class="p">,</span>i<span class="p">)</span>
+    <span class="p">}</span>
+    testing <span class="o">=</span> <span class="kp">cbind</span><span class="p">(</span>testing<span class="p">,</span> d<span class="p">[,</span><span class="m">-1</span><span class="p">])</span>
+<span class="p">}</span>
+testing <span class="o">=</span> testing<span class="p">[,</span><span class="o">-</span><span class="kt">c</span><span class="p">(</span>factCols<span class="p">)]</span>
+testing<span class="o">$</span>new_window_no <span class="o">=</span> <span class="m">1</span>
+testing<span class="o">$</span>new_window_yes <span class="o">=</span> <span class="m">0</span>
+testing <span class="o">=</span> testing<span class="p">[,</span><span class="o">-</span><span class="kt">c</span><span class="p">(</span><span class="kp">which</span><span class="p">(</span><span class="kp">colnames</span><span class="p">(</span>testing<span class="p">)</span> <span class="o">==</span> <span class="s">"new_window"</span><span class="p">))]</span>
+d <span class="o">=</span> testing<span class="p">[,</span><span class="m">56</span><span class="o">:</span><span class="m">63</span><span class="p">]</span>
+d<span class="p">[</span>d <span class="o">==</span> <span class="m">0</span><span class="p">]</span><span class="o">=</span><span class="m">-1</span>
+testing<span class="p">[,</span><span class="m">56</span><span class="o">:</span><span class="m">63</span><span class="p">]</span> <span class="o">=</span> d
+</pre></div>
+
+<h2>
+<a name="predict-and-prepare-output-for-evaluation" class="anchor" href="#predict-and-prepare-output-for-evaluation"><span class="octicon octicon-link"></span></a>Predict and prepare output for evaluation</h2>
+
+<ul>
+<li>there is 80% accuracy on the test data set</li>
+<li>see above how to try to improve this accuracy</li>
+</ul><div class="highlight highlight-r"><pre>pr <span class="o">=</span> predict<span class="p">(</span>fitMod<span class="p">,</span> testing<span class="p">,</span> type<span class="o">=</span><span class="s">"response"</span><span class="p">)</span>
+
+answers <span class="o">=</span> <span class="kp">apply</span><span class="p">(</span>pr<span class="p">,</span> <span class="m">1</span><span class="p">,</span> <span class="kr">function</span><span class="p">(</span>x<span class="p">)</span> <span class="kp">colnames</span><span class="p">(</span>pr<span class="p">)[</span><span class="kp">which.max</span><span class="p">(</span>x<span class="p">)])</span>
+pml_write_files <span class="o">=</span> <span class="kr">function</span><span class="p">(</span>x<span class="p">){</span>
+    n <span class="o">=</span> <span class="kp">length</span><span class="p">(</span>x<span class="p">)</span>
+    <span class="kr">for</span><span class="p">(</span>i <span class="kr">in</span> <span class="m">1</span><span class="o">:</span>n<span class="p">){</span>
+        filename <span class="o">=</span> <span class="kp">paste0</span><span class="p">(</span><span class="s">"problem_id_"</span><span class="p">,</span>i<span class="p">,</span><span class="s">".txt"</span><span class="p">)</span>
+        write.table<span class="p">(</span>x<span class="p">[</span>i<span class="p">],</span>file<span class="o">=</span>filename<span class="p">,</span>quote<span class="o">=</span><span class="kc">FALSE</span><span class="p">,</span>row.names<span class="o">=</span><span class="kc">FALSE</span><span class="p">,</span>col.names<span class="o">=</span><span class="kc">FALSE</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+pml_write_files<span class="p">(</span>answers<span class="p">)</span>
+</pre></div>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="http://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
