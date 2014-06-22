@@ -1,0 +1,137 @@
+Prediction of the Excercise Manner
+========================================================
+
+## Loading liabraries and data
+
+```{r loading, message=FALSE}
+require(gbm)
+
+# download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+#              destfile="~/training.csv",method='wget')
+training = read.csv("~/training.csv")
+# download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+#               destfile="~/testing.csv",method='wget')
+testing = read.csv("~/testing.csv")
+```
+
+## Explore training dataset
+
+* observation vs. variables ... as is
+* observation vs. variables without NAs
+* number of columns which contains NA
+* all those columns contain the same amount of NAs 19216 which is almost 98% of all observations
+ * there is no racional reason to impute the data
+
+```{r exploration}
+dim(training)
+dim(na.omit(training))
+colSumsNA = colSums(is.na(training))
+sum(colSumsNA > 0)
+all(colSumsNA[colSumsNA>0] == 19216)
+```
+
+## Clean training dataset
+
+* __remove variables:__ 'X', 'cvtd_timestamp', all which conatin NA and empty observation record
+
+```{r clean training}
+training = training[, -c(1, 5,
+                         which(colSums(is.na(training)) > 0),
+                         which(colSums(training == "") > 0))]
+```
+
+## Transform training dataset variables
+
+* transform factor varibales into binary variable
+
+```{r transform training}
+factCols = c(1,4)
+for(colt in factCols) {    
+    d = as.data.frame(training[,colt])
+    for(i in levels(d[,1])) {
+        d = cbind(d, (i == d[,1]) * 1)
+        colnames(d)[ncol(d)] = paste0(colnames(training)[colt],"_",i)
+    }
+    training = cbind(training, d[,-1])
+}
+training = training[,-c(factCols)]
+d = training[,57:64]
+d[d == 0]=-1
+training[,57:64] = d
+```
+
+## Create model
+
+* I choosed Gradient Boosting Method for multinomial distribution
+ * it provides very high accuracy but interpretability is bad
+ * this kind of method is based on boosting trees
+* shown configuration is underfitted - see the picture
+ * I recommend increase n.tree parameter - it improves accuracy
+ * I recommend increase cv.fold parameter - it improves robust of the model
+
+### Expectation
+
+* I used only 4 fold cross validation because of computational difficulty. You can imporove robust of the model set the cross validation about 10 fold. Robust model means to have a model probably not to optimistic with the training data but we can obtain model with a lower error on testing dataset, which it is crucial.
+* I chose smaller k - I got smaller vaiance but bigger bias.
+```{r modeling, eval=FALSE}
+set.seed(123)
+
+fitMod <- gbm(classe ~ .,
+           data = training,
+           distribution = "multinomial",
+           n.tree = 2000,
+           shrinkage = 0.001,
+           cv.folds = 4,
+           bag.fraction = 0.8,
+           interaction.depth = 3,
+           verbose = FALSE)
+gbm.perf( fitMod, method="cv" )
+```
+
+![alt Multinomial Deviance](figure/multinomial_deviance.png)
+
+## Prepare testing data set
+
+* __remove variables__: 'X', 'cvtd_timestamp', 'problem_id', all clumns with NAs
+* transform factorial variables to the binary variables
+* all variables in the test set must have the same format as in training dataset
+
+```{r}
+testing = testing[,-c(which(colnames(testing) == "problem_id"))]
+testing = testing[, -c(1, 5, which(colSums(is.na(testing)) > 0))]
+factCols = c(1)
+for(colt in factCols) {    
+    d = as.data.frame(testing[,colt])
+    for(i in levels(d[,1])) {
+        d = cbind(d, (i == d[,1]) * 1)
+        colnames(d)[ncol(d)] = paste0(colnames(testing)[colt],"_",i)
+    }
+    testing = cbind(testing, d[,-1])
+}
+testing = testing[,-c(factCols)]
+testing$new_window_no = 1
+testing$new_window_yes = 0
+testing = testing[,-c(which(colnames(testing) == "new_window"))]
+d = testing[,56:63]
+d[d == 0]=-1
+testing[,56:63] = d
+```
+
+## Predict and prepare output for evaluation
+
+* there is 80% accuracy on the test data set
+* see above how to try to improve this accuracy
+
+```{r prediction, eval=FALSE}
+pr = predict(fitMod, testing, type="response")
+
+answers = apply(pr, 1, function(x) colnames(pr)[which.max(x)])
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+pml_write_files(answers)
+```
